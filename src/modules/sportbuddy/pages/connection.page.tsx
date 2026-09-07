@@ -1,0 +1,25 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { httpGet, HttpError } from '@core/http/http.client';
+import { Icon } from '@shared/components/icon';
+type Resource = 'ping' | 'zones' | 'license-types' | 'business-activities' | 'statistics';
+async function readResource(resource: Resource): Promise<unknown> {
+  if (resource === 'ping' || resource === 'statistics') return httpGet(resource);
+  const all: unknown[] = []; const limit = 200;
+  for (let offset = 0; ; offset += limit) {
+    const page = await httpGet<unknown[]>(resource, { offset, limit });
+    if (!Array.isArray(page)) throw new Error('The API returned an unexpected data format.');
+    all.push(...page); if (page.length < limit) return all;
+    if (offset >= 20000) throw new Error('Reference data exceeded the expected size. Please check the API.');
+  }
+}
+export function ConnectionPage() {
+  const [config, setConfig] = useState<{ configured: boolean; mapsConfigured: boolean } | null>(null); const [resource, setResource] = useState<Resource>('zones'); const [loadedResource, setLoadedResource] = useState<Resource | null>(null); const [result, setResult] = useState<unknown>(null); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [retryAt, setRetryAt] = useState(0); const [now, setNow] = useState(Date.now());
+  useEffect(() => { let active = true; fetch('/api/connection').then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(c => { if (active) setConfig(c); }).catch(() => { if (active) setError('Could not check server configuration. Reload this page to try again.'); }); const timer = setInterval(() => setNow(Date.now()), 1000); return () => { active = false; clearInterval(timer); }; }, []);
+  const load = async () => {
+    setBusy(true); setError(''); setResult(null); setLoadedResource(null);
+    try { setResult(await readResource(resource)); setLoadedResource(resource); } catch (e) { setError(e instanceof Error ? e.message : 'Could not load the reference data.'); if (e instanceof HttpError && e.status === 429) setRetryAt(Date.now() + (e.retryAfterSeconds ?? 60) * 1000); } finally { setBusy(false); }
+  };
+  const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  return <div className="page-width inner-page"><div className="page-heading"><p className="kicker">UNDER THE HOOD</p><h1>Connected with <em>clarity.</em></h1><p>Live council reference data, with a clear view of what powers the demo.</p></div><div className="connection-grid"><section className="form-panel"><div className="section-heading"><h2>Rebana License API</h2><span className="tag">{config ? config.configured ? 'Credentials configured' : 'Setup needed' : 'Checking setup…'}</span></div><p>This API provides council zones, licensing categories, business activities, and licensing statistics. It does not provide sports courts, bookings, games, or player accounts.</p><p>SportBuddy’s courts and social interactions use local demo data. No licensing statistics are presented as player or game counts.</p>{config && !config.configured && <div className="inline-notice">Add the four sandbox credentials from your council administrator to <code>.env.local</code>, then restart SportBuddy. Use <code>.env.example</code> as the template. Credentials stay on the server.</div>}<label>Reference resource<select value={resource} disabled={busy} onChange={e => { setResource(e.target.value as Resource); setResult(null); setLoadedResource(null); }}>{(['zones', 'license-types', 'business-activities', 'statistics', 'ping'] as Resource[]).map(r => <option key={r} value={r}>{r === 'ping' ? 'Connection check' : r.replaceAll('-', ' ')}</option>)}</select></label><button className="button dark" disabled={!config?.configured || busy || remaining > 0} onClick={load}>{busy ? 'Loading reference data…' : remaining ? `Retry in ${remaining}s` : 'Load live reference data'}<Icon name="arrow" size={17}/></button>{error && <p className="field-error" role="alert">{error}</p>}<a className="text-link" href="https://rebana.canang.com.my/rebana-license/v3/api-docs/sandbox" target="_blank" rel="noreferrer">View API specification ↗</a></section><aside className="host-tips"><Icon name="map" size={32}/><h2>Google Maps</h2><span className="tag">{config?.mapsConfigured ? 'Browser key configured' : 'Browser key needed'}</span><p>Set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> to enable interactive venue maps. Enable Maps JavaScript API and restrict the key to this app’s websites.</p><p>“Open in Google Maps” and directions links work without a key.</p><a className="text-link" href="https://developers.google.com/maps/documentation/javascript/get-api-key" target="_blank" rel="noreferrer">Google Maps setup ↗</a></aside></div>{result !== null && <section className="reference-results"><div className="section-heading"><h2>Live response: {loadedResource}</h2><span className="tag">Rebana API{Array.isArray(result) ? ` · ${result.length} records` : ''}</span></div><p className="muted">Read-only council reference data. Paginated lists are loaded in full.</p><pre>{JSON.stringify(result, null, 2)}</pre></section>}</div>;
+}

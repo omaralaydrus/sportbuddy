@@ -1,0 +1,13 @@
+import { createAction } from '@reduxjs/toolkit';
+import type { DemoState, Game, Player } from '@shared/models/sportbuddy.model';
+export const hydrate = createAction<DemoState>('[SportBuddy] Hydrate');
+export const switchViewer = createAction<string>('[SportBuddy] Switch demo player');
+export const join = createAction<{ id: string; now: number }>('[Games] Join');
+export const leave = createAction<{ id: string; now: number }>('[Games] Leave');
+export const saveGame = createAction<{ game: Game; now: number }>('[Games] Save');
+export const cancelGame = createAction<string>('[Games] Cancel');
+export const toggleSave = createAction<string>('[Courts] Toggle saved');
+export const connect = createAction<{ id: string; operation: 'request' | 'accept' | 'remove' }>('[Community] Update connection');
+export const updateProfile = createAction<Player>('[Profile] Update');
+export const notify = createAction<string>('[SportBuddy] Notify');
+export const storageFailed = createAction<string>('[SportBuddy] Storage failed');
